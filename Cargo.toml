@@ -12,15 +12,26 @@ primitive-types = { version = "0.6", default-features = false, features = ["rlp"
 rlp = { version = "0.4", default-features = false }
 byteorder = { version = "1", default-features = false }
 sha3 = { version = "0.8", default-features = false }
+sha2 = { version = "0.8", default-features = false, optional = true }
+
+
+tiny-keccak = { version = "2.0.1", features = ["keccak"], optional = true }
+intrusive-collections = { version = "0.9", optional = true }
+
+codec = { package = "parity-scale-codec", version = "1.3.4", default-features = false, features = ["derive"], optional = true }
+rlp-derive = { version = "0.1.0", default-features = false, optional = true }
+sp-std = { git = "https://github.com/paritytech/substrate", default-features = false }
 
 [dev-dependencies]
 hex-literal = "0.2.1"
 
 [features]
-default = ["std"]
+default = ["std", "withproofs"]
+withproofs = ["codec", "rlp-derive", "tiny-keccak", "intrusive-collections", "sha2"]
 std = [
   "ethereum-types/std",
   "rlp/std",
   "byteorder/std",
   "sha3/std",
+  "sp-std/std",
 ]

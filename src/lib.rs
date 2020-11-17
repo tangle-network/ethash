@@ -8,6 +8,8 @@ extern crate alloc;
 
 mod miller_rabin;
 mod dag;
+#[cfg(feature = "withproofs")]
+mod proof;
 
 pub use dag::{LightDAG, Patch, EthereumPatch};
 
