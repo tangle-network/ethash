@@ -13,7 +13,8 @@ rlp = { version = "0.4", default-features = false }
 byteorder = { version = "1", default-features = false }
 sha3 = { version = "0.8", default-features = false }
 sha2 = { version = "0.8", default-features = false, optional = true }
-
+hex = { version = "0.4", default-features = false, optional = true }
+mrklt = { version = "0.1", default-features = false, optional = true}
 
 tiny-keccak = { version = "2.0.1", features = ["keccak"], optional = true }
 intrusive-collections = { version = "0.9", optional = true }
@@ -27,7 +28,15 @@ hex-literal = "0.2.1"
 
 [features]
 default = ["std", "withproofs"]
-withproofs = ["codec", "rlp-derive", "tiny-keccak", "intrusive-collections", "sha2"]
+withproofs = [
+  "codec",
+  "rlp-derive",
+  "tiny-keccak",
+  "intrusive-collections",
+  "sha2",
+  "hex",
+  "mrklt"
+]
 std = [
   "ethereum-types/std",
   "rlp/std",
