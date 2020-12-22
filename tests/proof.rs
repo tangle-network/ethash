@@ -1,3 +1,4 @@
+use byteorder::ByteOrder;
 use ethash::types;
 
 // this test is used as a playground
@@ -13,15 +14,21 @@ fn proofs() {
     );
 
     let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
-    let (mix_hash, _) = dag.hashimoto(header_hash, header.nonce);
+    let (mix_hash, result) = dag.hashimoto(header_hash, header.nonce);
+    assert_eq!(
+        result.as_bytes(),
+        hex::decode("000000003a0a4fb7f886bad18226a47fb09767ac8c0c87141083443ac5cfdf59").unwrap()
+    );
     assert_eq!(mix_hash, header.mix_hash);
 
-    // there is a problem calculating the correct indices.
-    // will try again.
-    let indices =
-        ethash::BlockWithProofs::get_indices(header_hash, header.nonce, dag.full_size, |i| {
-            ethash::calc_dataset_item(&dag.cache, i)
-        });
+    let indices = ethash::get_indices(header_hash, header.nonce, dag.full_size, |i| {
+        let raw_data = ethash::calc_dataset_item(&dag.cache, i);
+        let mut data = [0u32; 16];
+        for (i, b) in data.iter_mut().enumerate() {
+            *b = byteorder::LE::read_u32(&raw_data[(i * 4)..]);
+        }
+        data
+    });
 
     assert_eq!(
         indices,

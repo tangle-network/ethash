@@ -52,9 +52,7 @@ impl BlockWithProofs {
     pub fn create_proof(&mut self, cache: Vec<u8>, header: types::BlockHeader) {
         let epoch = (header.number.as_u128() / 30000) as usize;
         let full_size = crate::get_full_size(epoch);
-        let indices = Self::get_indices(H256([0u8; 32]), header.nonce, full_size, |i| {
-            crate::calc_dataset_item(&cache, i)
-        });
+        let indices = vec![];
 
         for index in indices {
             if let Some((element, proof)) =
@@ -72,63 +70,6 @@ impl BlockWithProofs {
                 self.append_merkle_proofs(all_proofs);
             }
         }
-    }
-
-    pub fn get_indices<F: Fn(usize) -> H512>(
-        header_hash: H256,
-        nonce: H64,
-        full_size: usize,
-        lookup: F,
-    ) -> Vec<u32> {
-        let mut result: Vec<u32> = vec![];
-        let n = full_size / HASH_BYTES;
-        let w = MIX_BYTES / WORD_BYTES;
-        const MIXHASHES: usize = MIX_BYTES / HASH_BYTES;
-        let s = {
-            let mut data = [0u8; 40];
-            data[..32].copy_from_slice(&header_hash.0);
-            data[32..].copy_from_slice(&nonce.0);
-            data[32..].reverse();
-            keccak_512(&data)
-        };
-        let mut mix = [0u8; MIX_BYTES];
-        for i in 0..MIXHASHES {
-            for j in 0..64 {
-                mix[i * HASH_BYTES + j] = s[j];
-            }
-        }
-
-        for i in 0..ACCESSES {
-            let p = (crate::fnv(
-                (i as u32).bitxor(LittleEndian::read_u32(s.as_ref())),
-                LittleEndian::read_u32(&mix[(i % w * 4)..]),
-            ) as usize)
-                % (n / MIXHASHES)
-                * MIXHASHES;
-            result.push(p as u32);
-            let mut newdata = [0u8; MIX_BYTES];
-            for j in 0..MIXHASHES {
-                let v = lookup(p + j);
-                for k in 0..64 {
-                    newdata[j * 64 + k] = v[k];
-                }
-            }
-            mix = crate::fnv128(mix, newdata);
-        }
-        let mut cmix = [0u8; MIX_BYTES / 4];
-        for i in 0..(MIX_BYTES / 4 / 4) {
-            let j = i * 4;
-            let a = crate::fnv(
-                LittleEndian::read_u32(&mix[(j * 4)..]),
-                LittleEndian::read_u32(&mix[((j + 1) * 4)..]),
-            );
-            let b = crate::fnv(a, LittleEndian::read_u32(&mix[((j + 2) * 4)..]));
-            let c = crate::fnv(b, LittleEndian::read_u32(&mix[((j + 3) * 4)..]));
-
-            LittleEndian::write_u32(&mut cmix[j..], c);
-        }
-
-        result
     }
 
     fn calculate_proof(
@@ -157,4 +98,40 @@ impl BlockWithProofs {
         }
         return result;
     }
+}
+
+pub fn get_indices<F>(header_hash: H256, nonce: H64, full_size: usize, lookup: F) -> Vec<u32>
+where
+    F: Fn(usize) -> [u32; HASH_LENGTH],
+{
+    let mut result = vec![];
+    let rows = (full_size / MIX_BYTES) as u32;
+    let mut seed = [0u8; 40]; // 32 + 8
+    seed[0..32].copy_from_slice(header_hash.as_bytes());
+    seed[32..].copy_from_slice(nonce.as_bytes());
+    seed[32..].reverse();
+    let seed = keccak_512(&seed);
+    let seed_head = LittleEndian::read_u32(&seed);
+
+    const MIX_LEN: usize = MIX_BYTES / 4;
+    let mut mix = [0u32; MIX_LEN];
+    for (i, b) in mix.iter_mut().enumerate() {
+        *b = LittleEndian::read_u32(&seed[(i % 16 * 4)..]);
+    }
+    let mut temp = [0u32; MIX_LEN];
+    for i in 0..ACCESSES {
+        let a = i as u32 ^ seed_head;
+        let m = mix[i % MIX_LEN];
+        let parent = crate::fnv(a, m) % rows;
+        result.push(parent);
+        for k in 0..MIX_BYTES / ACCESSES {
+            let cache_index = 2 * parent + k as u32;
+            let data = lookup(cache_index as _);
+            let from = k * HASH_LENGTH;
+            let to = from + HASH_LENGTH;
+            temp[from..to].copy_from_slice(&data);
+        }
+        crate::fnv_mix_hash(&mut mix, temp);
+    }
+    result
 }

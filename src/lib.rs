@@ -106,6 +106,12 @@ fn fnv(v1: u32, v2: u32) -> u32 {
     (((v1 * 0x01000000) + (v1 * 0x193)) ^ v2) as _
 }
 
+fn fnv_mix_hash(mix: &mut [u32; 32], data: [u32; 32]) {
+    for i in 0..32 {
+        mix[i] = (mix[i] * FNV_PRIME) ^ data[i];
+    }
+}
+
 fn fnv64(a: [u8; 64], b: [u8; 64]) -> [u8; 64] {
     let mut r = [0u8; 64];
     for i in 0..(64 / 4) {
