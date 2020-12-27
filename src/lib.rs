@@ -108,7 +108,7 @@ fn fnv(v1: u32, v2: u32) -> u32 {
 
 fn fnv_mix_hash(mix: &mut [u32; 32], data: [u32; 32]) {
     for i in 0..32 {
-        mix[i] = (mix[i] * FNV_PRIME) ^ data[i];
+        mix[i] = (mix[i].wrapping_mul(FNV_PRIME)).bitxor(data[i]);
     }
 }
 
@@ -183,9 +183,9 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
     let n = dataset.len() / HASH_BYTES;
     for i in 0..n {
         let z = calc_dataset_item(cache, i);
-        for j in 0..64 {
-            dataset[i * 64 + j] = z[j];
-        }
+        let from = i * 64;
+        let to = from + 64;
+        dataset[from..to].copy_from_slice(z.as_bytes());
     }
 }
 

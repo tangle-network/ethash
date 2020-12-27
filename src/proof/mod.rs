@@ -1,15 +1,12 @@
-use std::ops::BitXor;
+use std::io;
 
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
-use ethereum_types::H512;
 use ethereum_types::{H128, H256, H64};
 use tiny_keccak::{Hasher, Keccak};
 
 use crate::ACCESSES;
-use crate::HASH_BYTES;
 use crate::MIX_BYTES;
-use crate::WORD_BYTES;
 
 pub const CACHE_LEVEL: u64 = 15;
 pub const HASH_LENGTH: usize = 16;
@@ -29,77 +26,6 @@ pub fn keccak_512(data: &[u8]) -> [u8; 64] {
     output
 }
 
-#[derive(Debug)]
-pub struct Hex(pub Vec<u8>);
-
-pub struct BlockWithProofs {
-    pub proof_length: u64,
-    pub header_rlp: Hex,
-    pub merkle_root: H128,
-    pub elements: Vec<H256>,
-    pub merkle_proofs: Vec<H128>,
-}
-
-impl BlockWithProofs {
-    pub fn append_to_elements(&mut self, elts: Vec<H256>) {
-        for i in 0..elts.len() {
-            self.elements.push(elts[i]);
-        }
-    }
-
-    pub fn append_merkle_proofs(&mut self, _elts: Vec<H256>) {}
-
-    pub fn create_proof(&mut self, cache: Vec<u8>, header: types::BlockHeader) {
-        let epoch = (header.number.as_u128() / 30000) as usize;
-        let full_size = crate::get_full_size(epoch);
-        let indices = vec![];
-
-        for index in indices {
-            if let Some((element, proof)) =
-                Self::calculate_proof(index, header.clone(), cache.clone())
-            {
-                let es = Self::to_h256_array(element);
-                self.append_to_elements(es);
-
-                let mut all_proofs: Vec<H256> = vec![];
-                let br_arr = Self::hashes_to_branches_array(proof);
-                for i in 0..br_arr.len() {
-                    all_proofs.push(H256::from(br_arr[i]));
-                }
-
-                self.append_merkle_proofs(all_proofs);
-            }
-        }
-    }
-
-    fn calculate_proof(
-        _index: u32,
-        _header: types::BlockHeader,
-        _cache: Vec<u8>,
-    ) -> Option<([u8; WORD_LENGTH], [u8; HASH_LENGTH])> {
-        None
-    }
-
-    fn hashes_to_branches_array(_proof: [u8; HASH_LENGTH]) -> Vec<[u8; BRANCH_ELEMENT_LENGTH]> {
-        vec![]
-    }
-
-    fn to_h256_array(elt: [u8; 128]) -> Vec<H256> {
-        let mut result = vec![];
-        for i in 0..(WORD_LENGTH / 32) {
-            let elt_temp = &elt[(i * 32)..((i + 1) * 32)];
-            let mut temp: [u8; 32] = [0; 32];
-            for j in 0..temp.len() {
-                temp[j] = elt_temp[j];
-            }
-            // ensure the endianness is preserved
-            let val = H256::from(temp);
-            result.push(val);
-        }
-        return result;
-    }
-}
-
 pub fn get_indices<F>(header_hash: H256, nonce: H64, full_size: usize, lookup: F) -> Vec<u32>
 where
     F: Fn(usize) -> [u32; HASH_LENGTH],
@@ -107,8 +33,8 @@ where
     let mut result = vec![];
     let rows = (full_size / MIX_BYTES) as u32;
     let mut seed = [0u8; 40]; // 32 + 8
-    seed[0..32].copy_from_slice(header_hash.as_bytes());
-    seed[32..].copy_from_slice(nonce.as_bytes());
+    seed[0..32].copy_from_slice(header_hash.as_bytes()); // 32
+    seed[32..].copy_from_slice(nonce.as_bytes()); // 8
     seed[32..].reverse();
     let seed = keccak_512(&seed);
     let seed_head = LittleEndian::read_u32(&seed);
@@ -134,4 +60,52 @@ where
         crate::fnv_mix_hash(&mut mix, temp);
     }
     result
+}
+
+struct DagMerkleTree;
+
+impl mrklt::Merge for DagMerkleTree {
+    type Hash = mtree::Hash;
+
+    fn leaf(leaf: &Self::Hash) -> Self::Hash {
+        *leaf
+    }
+
+    fn merge(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
+        mtree::hash(left, right)
+    }
+}
+
+/// A conventional way for calculating the Root hash of the merkle tree.
+pub fn calc_dataset_merkle_root(epoch: usize, dataset: impl io::Read) -> H128 {
+    let map = calc_dataset_merkle_proofs(epoch, dataset);
+    let root = map.root();
+    H128::from_slice(&root.0)
+}
+
+/// Calculate the merkle tree and return a HashCache that can be used to calculating proofs and can
+/// be used to cache them to filesystem.
+pub fn calc_dataset_merkle_proofs(
+    epoch: usize,
+    mut dataset: impl io::Read,
+) -> mrklt::proof_map::HashCache<mtree::Hash> {
+    let full_size = crate::get_full_size(epoch);
+    let full_size_128_resolution = full_size / 128;
+    let mut buf = [0u8; 128];
+    let mut i = 0;
+    let mut leaves = Vec::with_capacity(full_size_128_resolution);
+    while i < full_size_128_resolution {
+        if let Ok(n) = dataset.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+            if n != 128 {
+                panic!("Malformed dataset");
+            }
+        }
+        let leaf = mtree::hash_element(&mtree::Word(buf));
+        leaves.push(leaf);
+        i += 1;
+    }
+    mrklt::proof_map::HashCache::from_leaves::<DagMerkleTree>(&leaves)
 }

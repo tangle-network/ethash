@@ -42,4 +42,29 @@ fn proofs() {
             375080, 5367006, 2543741, 2475727, 341558, 5858560, 7361407, 3569253
         ]
     );
+    let dataset_path = std::path::PathBuf::from("target/dataset.bin");
+    let dataset = if dataset_path.exists() {
+        eprintln!("Dataset found at target/dataset.bin");
+        std::fs::File::open("target/dataset.bin").expect("dataset is generated")
+    } else {
+        let full_size = ethash::get_full_size(dag.epoch);
+        let mut bytes = vec![0u8; full_size];
+        eprintln!("Generating dataset ...");
+        ethash::make_dataset(&mut bytes, &dag.cache);
+        std::fs::write("target/dataset.bin", &bytes).unwrap();
+        eprintln!("Dataset is ready!");
+        std::fs::File::open("target/dataset.bin").expect("dataset is generated")
+    };
+    let tree = ethash::calc_dataset_merkle_proofs(dag.epoch, &dataset);
+    let root = tree.root();
+
+    // an easier way to calclute the root, if you don't need the proofs.
+    // let root = ethash::calc_dataset_merkle_root(dag.epoch, &dataset);
+
+    assert_eq!(hex::encode(root.0), "b1f71111e5a1cea6090fc8e94918d82a");
+
+    for index in &indices {
+        // these proofs could be serde to json files.
+        let proofs = tree.create_proof(*index as _);
+    }
 }

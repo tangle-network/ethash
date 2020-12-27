@@ -12,14 +12,14 @@ const HASH_LENGTH: usize = 16; // bytes.
 const WORD_LENGTH: usize = 128; // bytes.
 const BRANCH_ELEMENT_LENGTH: usize = 32; // bytes.
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct Hash([u8; HASH_LENGTH]);
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Hash(pub [u8; HASH_LENGTH]);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct Word([u8; WORD_LENGTH]);
+pub(super) struct Word(pub [u8; WORD_LENGTH]);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-struct BranchElement([u8; BRANCH_ELEMENT_LENGTH]);
+pub(super) struct BranchElement(pub [u8; BRANCH_ELEMENT_LENGTH]);
 
 impl Word {
     pub fn into_h256_array(mut self) -> [H256; 4] {
@@ -217,7 +217,7 @@ struct MerkleTree {
     ordered_indexes: Vec<usize>,
     stored_level: usize,
     export_node_count: usize,
-    export_nodes: Vec<Word>,
+    export_nodes: Vec<Hash>,
 }
 
 impl MerkleTree {
@@ -259,40 +259,43 @@ impl MerkleTree {
         self.insert_node(node);
     }
 
-    #[allow(unreachable_code)]
     fn insert_node(&mut self, node: Node) {
-        // this code dose not compile for now!
-        todo!();
         let count = node.count;
-        let node_ref = self.buffer.push_back(node);
-        let prev = node_ref.borrow().prev;
+        let mut node_ref = self.buffer.push_back(node);
+        let mut prev = node_ref.borrow().prev.clone();
         loop {
             let mut prev_node = match prev.as_mut() {
-                Some(node) => node.borrow().elem,
+                Some(node) => node.borrow_mut(),
                 None => break,
             };
 
-            if count != prev_node.count {
+            if count != prev_node.elem.count {
                 break;
             }
             if !node_ref.borrow().elem.branches.is_empty() {
-                for (k, mut v) in &mut node.branches {
+                for (k, mut v) in &mut node_ref.borrow_mut().elem.branches {
                     let prev_node = &mut prev_node;
-                    v.root = v.root.accept_left_sibling(prev_node.hash);
-                    prev_node.branches.insert(*k, v.clone());
+                    Rc::get_mut(&mut v).unwrap().root =
+                        v.root.accept_left_sibling(prev_node.elem.hash);
+                    prev_node.elem.branches.insert(*k, v.clone());
                 }
             }
 
             let prev_node = &mut prev_node;
-            prev_node.hash = hash(prev_node.hash, node.hash);
-            prev_node.count = node.count * 2 + 1;
-            if prev_node.count == self.export_node_count {
-                // !!
+            prev_node.elem.hash = hash(&prev_node.elem.hash, &node_ref.borrow().elem.hash);
+            prev_node.elem.count = count * 2 + 1;
+            if prev_node.elem.count == self.export_node_count {
+                self.export_nodes.push(prev_node.elem.hash);
             }
+
+            // self.buffer.remove(node_ref);
+            // self.buffer.remove(prev);
+
+            node_ref = self.buffer.push_back(prev_node.elem.clone());
         }
     }
 }
-fn hash(a: Hash, b: Hash) -> Hash {
+pub(super) fn hash(a: &Hash, b: &Hash) -> Hash {
     let hasher = sha2::Sha256::default();
     let hash = hasher
         .chain([0u8; 16])
@@ -301,16 +304,16 @@ fn hash(a: Hash, b: Hash) -> Hash {
         .chain(b.0)
         .result();
     let mut data = [0u8; HASH_LENGTH];
-    data.copy_from_slice(&hash[0..HASH_LENGTH]);
+    data.copy_from_slice(&hash[HASH_LENGTH..]);
     Hash(data)
 }
 
-fn hash_element(word: &Word) -> Hash {
+pub(super) fn hash_element(word: &Word) -> Hash {
     let (first, second) = word.conventional();
     let hasher = sha2::Sha256::default();
     let hash = hasher.chain(first).chain(second).result();
     let mut data = [0u8; HASH_LENGTH];
-    data.copy_from_slice(&hash[0..HASH_LENGTH]);
+    data.copy_from_slice(&hash[HASH_LENGTH..]);
     Hash(data)
 }
 #[cfg(test)]

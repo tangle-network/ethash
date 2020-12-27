@@ -29,6 +29,19 @@ impl<T> Node<T> {
             next: None,
         }))
     }
+
+    fn unlink(this: NodeRef<T>) {
+        let this = Rc::try_unwrap(this).ok().unwrap();
+        let mut inner = this.into_inner();
+        if let Some(ref prev) = inner.prev {
+            prev.borrow_mut().next = inner.next.clone();
+            inner.prev = None;
+        }
+        if let Some(ref next) = inner.next {
+            next.borrow_mut().prev = inner.prev.clone();
+            inner.prev = None;
+        }
+    }
 }
 
 impl<T> List<T> {
@@ -157,6 +170,7 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
 #[cfg(test)]
 mod test {
     use super::List;
+    use super::Node;
 
     #[test]
     fn basics() {

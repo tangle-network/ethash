@@ -35,7 +35,7 @@ withproofs = [
   "intrusive-collections",
   "sha2",
   "hex",
-  "mrklt"
+  "mrklt",
 ]
 std = [
   "ethereum-types/std",
