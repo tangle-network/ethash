@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use std::io;
 
 use byteorder::ByteOrder;
@@ -13,8 +14,6 @@ pub const HASH_LENGTH: usize = 16;
 pub const WORD_LENGTH: usize = 128;
 pub const BRANCH_ELEMENT_LENGTH: usize = 32;
 
-// not needed for now
-mod linked_list;
 pub mod mtree;
 pub mod types;
 
@@ -26,7 +25,12 @@ pub fn keccak_512(data: &[u8]) -> [u8; 64] {
     output
 }
 
-pub fn get_indices<F>(header_hash: H256, nonce: H64, full_size: usize, lookup: F) -> Vec<u32>
+pub fn get_indices<F>(
+    header_hash: H256,
+    nonce: H64,
+    full_size: usize,
+    lookup: F,
+) -> Vec<u32>
 where
     F: Fn(usize) -> [u32; HASH_LENGTH],
 {
@@ -67,9 +71,7 @@ struct DagMerkleTree;
 impl mrklt::Merge for DagMerkleTree {
     type Hash = mtree::Hash;
 
-    fn leaf(leaf: &Self::Hash) -> Self::Hash {
-        *leaf
-    }
+    fn leaf(leaf: &Self::Hash) -> Self::Hash { *leaf }
 
     fn merge(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
         mtree::hash(left, right)
@@ -77,14 +79,16 @@ impl mrklt::Merge for DagMerkleTree {
 }
 
 /// A conventional way for calculating the Root hash of the merkle tree.
+#[cfg(feature = "std")]
 pub fn calc_dataset_merkle_root(epoch: usize, dataset: impl io::Read) -> H128 {
     let map = calc_dataset_merkle_proofs(epoch, dataset);
     let root = map.root();
     H128::from_slice(&root.0)
 }
 
-/// Calculate the merkle tree and return a HashCache that can be used to calculating proofs and can
-/// be used to cache them to filesystem.
+/// Calculate the merkle tree and return a HashCache that can be used to
+/// calculating proofs and can be used to cache them to filesystem.
+#[cfg(feature = "std")]
 pub fn calc_dataset_merkle_proofs(
     epoch: usize,
     mut dataset: impl io::Read,

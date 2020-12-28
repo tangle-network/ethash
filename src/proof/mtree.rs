@@ -1,12 +1,8 @@
-use super::linked_list::List;
-use core::fmt;
+use core::convert::TryInto;
+use core::ops::Deref;
+
 use ethereum_types::H256;
 use sha2::Digest;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::convert::TryInto;
-use std::ops::Deref;
-use std::rc::Rc;
 
 const HASH_LENGTH: usize = 16; // bytes.
 const WORD_LENGTH: usize = 128; // bytes.
@@ -33,15 +29,17 @@ impl Word {
             .try_into()
             .expect("hash to H256 should never fails")
     }
+
     /// #### Conventional encoding
     ///
-    /// To make it easier for ethereum smartcontract to follow the hash calculation,
-    /// we use a convention to encode DAG dataset element to use in hash function.
-    /// The encoding is defined as the following pseudo code:
+    /// To make it easier for ethereum smartcontract to follow the hash
+    /// calculation, we use a convention to encode DAG dataset element to use in
+    /// hash function. The encoding is defined as the following pseudo code:
     ///
-    /// 1. assume the element is `abcd` where a, b, c, d are 32 bytes word
-    /// 2. `first = concat(reverse(a), reverse(b))` where `reverse` reverses the bytes
-    /// 3. `second = concat(reverse(c), reverse(d))`
+    /// - 1 assume the element is `abcd` where a, b, c, d are 32 bytes word
+    /// - 2 `first = concat(reverse(a), reverse(b))` where `reverse` reverses
+    ///   the bytes.
+    /// - 3 `second = concat(reverse(c), reverse(d))`
     /// 4. conventional encoding of `abcd` is `concat(first, second)`
     pub fn conventional(&self) -> ([u8; 64], [u8; 64]) {
         let mut first = [0u8; 64];
@@ -65,40 +63,16 @@ impl Word {
     }
 }
 
-impl fmt::Display for Hash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-impl fmt::Display for Word {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-impl fmt::Display for BranchElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
 impl From<[u8; HASH_LENGTH]> for Hash {
-    fn from(b: [u8; HASH_LENGTH]) -> Self {
-        Self(b)
-    }
+    fn from(b: [u8; HASH_LENGTH]) -> Self { Self(b) }
 }
 
 impl From<[u8; WORD_LENGTH]> for Word {
-    fn from(b: [u8; WORD_LENGTH]) -> Self {
-        Self(b)
-    }
+    fn from(b: [u8; WORD_LENGTH]) -> Self { Self(b) }
 }
 
 impl From<[u8; BRANCH_ELEMENT_LENGTH]> for BranchElement {
-    fn from(b: [u8; BRANCH_ELEMENT_LENGTH]) -> Self {
-        Self(b)
-    }
+    fn from(b: [u8; BRANCH_ELEMENT_LENGTH]) -> Self { Self(b) }
 }
 
 impl From<[Hash; 2]> for BranchElement {
@@ -111,190 +85,27 @@ impl From<[Hash; 2]> for BranchElement {
 }
 
 impl Into<[H256; 4]> for Word {
-    fn into(self) -> [H256; 4] {
-        self.into_h256_array()
-    }
+    fn into(self) -> [H256; 4] { self.into_h256_array() }
 }
 
 impl Deref for Hash {
     type Target = [u8; HASH_LENGTH];
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl Deref for Word {
     type Target = [u8; WORD_LENGTH];
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl Deref for BranchElement {
     type Target = [u8; BRANCH_ELEMENT_LENGTH];
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-#[derive(Debug, Clone)]
-struct BranchNode {
-    hash: Option<Hash>,
-    left: Option<Rc<Self>>,
-    right: Option<Rc<Self>>,
-    element_on_left: bool,
-}
-
-impl BranchNode {
-    fn accept_left_sibling(&self, hash: Hash) -> Self {
-        Self {
-            hash: None,
-            left: Some(Rc::new(Self {
-                hash: Some(hash),
-                left: None,
-                right: None,
-                element_on_left: false,
-            })),
-            right: Some(Rc::new(self.clone())),
-            element_on_left: false,
-        }
-    }
-
-    fn accept_right_sibling(&self, hash: Hash) -> Self {
-        Self {
-            hash: None,
-            right: Some(Rc::new(Self {
-                hash: Some(hash),
-                left: None,
-                right: None,
-                element_on_left: false,
-            })),
-            left: Some(Rc::new(self.clone())),
-            element_on_left: true,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct BranchTree {
-    raw_data: Word,
-    hashed_data: Hash,
-    root: BranchNode,
-}
-
-#[derive(Debug)]
-struct Node {
-    hash: Hash,
-    count: usize,
-    branches: HashMap<usize, Rc<BranchTree>>,
-}
-
-impl Clone for Node {
-    fn clone(&self) -> Self {
-        Self {
-            hash: self.hash,
-            count: self.count,
-            branches: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct NodeElement {
-    next: Option<Box<Self>>,
-    prev: Option<Box<Self>>,
-    value: Node,
-}
-
-#[derive(Debug)]
-struct MerkleTree {
-    buffer: List<Node>,
-    finalized: bool,
-    indexes: HashSet<usize>,
-    ordered_indexes: Vec<usize>,
-    stored_level: usize,
-    export_node_count: usize,
-    export_nodes: Vec<Hash>,
-}
-
-impl MerkleTree {
-    pub fn stored_level(&self) -> usize {
-        self.stored_level
-    }
-
-    pub fn register_stored_level(&mut self, depth: usize, level: usize) {
-        self.stored_level = level;
-        self.export_node_count = 1 << ((depth - level + 1) - 1);
-    }
-
-    pub fn register_index(&mut self, indexes: impl Iterator<Item = usize> + Clone) {
-        self.indexes.extend(indexes.clone());
-        self.ordered_indexes.extend(indexes);
-    }
-
-    pub fn insert(&mut self, data: Word, index: usize) {
-        let mut node = Node {
-            hash: hash_element(&data),
-            count: 1,
-            branches: HashMap::new(),
-        };
-        if self.indexes.contains(&index) {
-            node.branches.insert(
-                index,
-                Rc::new(BranchTree {
-                    raw_data: data,
-                    hashed_data: node.hash,
-                    root: BranchNode {
-                        hash: Some(node.hash),
-                        left: None,
-                        right: None,
-                        element_on_left: false,
-                    },
-                }),
-            );
-        }
-        self.insert_node(node);
-    }
-
-    fn insert_node(&mut self, node: Node) {
-        let count = node.count;
-        let mut node_ref = self.buffer.push_back(node);
-        let mut prev = node_ref.borrow().prev.clone();
-        loop {
-            let mut prev_node = match prev.as_mut() {
-                Some(node) => node.borrow_mut(),
-                None => break,
-            };
-
-            if count != prev_node.elem.count {
-                break;
-            }
-            if !node_ref.borrow().elem.branches.is_empty() {
-                for (k, mut v) in &mut node_ref.borrow_mut().elem.branches {
-                    let prev_node = &mut prev_node;
-                    Rc::get_mut(&mut v).unwrap().root =
-                        v.root.accept_left_sibling(prev_node.elem.hash);
-                    prev_node.elem.branches.insert(*k, v.clone());
-                }
-            }
-
-            let prev_node = &mut prev_node;
-            prev_node.elem.hash = hash(&prev_node.elem.hash, &node_ref.borrow().elem.hash);
-            prev_node.elem.count = count * 2 + 1;
-            if prev_node.elem.count == self.export_node_count {
-                self.export_nodes.push(prev_node.elem.hash);
-            }
-
-            // self.buffer.remove(node_ref);
-            // self.buffer.remove(prev);
-
-            node_ref = self.buffer.push_back(prev_node.elem.clone());
-        }
-    }
-}
 pub(super) fn hash(a: &Hash, b: &Hash) -> Hash {
     let hasher = sha2::Sha256::default();
     let hash = hasher

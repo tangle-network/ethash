@@ -1,7 +1,6 @@
 //! Apache-2 licensed Ethash implementation.
 
 #![cfg_attr(not(feature = "std"), no_std)]
-
 extern crate alloc;
 
 // The reference algorithm used is from https://github.com/ethereum/wiki/wiki/Ethash
@@ -15,8 +14,9 @@ pub use proof::*;
 
 pub use dag::{EthereumPatch, LightDAG, Patch};
 
-use byteorder::{ByteOrder, LittleEndian};
 use core::ops::BitXor;
+
+use byteorder::{ByteOrder, LittleEndian};
 use ethereum_types::{BigEndianHash, H256, H512, H64, U256, U64};
 use miller_rabin::is_prime;
 use rlp::Encodable;
@@ -100,6 +100,7 @@ pub fn make_cache(cache: &mut [u8], seed: H256) {
 }
 
 pub const FNV_PRIME: u32 = 0x01000193;
+
 fn fnv(v1: u32, v2: u32) -> u32 {
     let v1 = v1 as u64;
     let v2 = v2 as u64;
@@ -378,24 +379,26 @@ pub fn get_seedhash(epoch: usize) -> H256 {
 mod tests {
     use crate::{EthereumPatch, LightDAG};
     use ethereum_types::{H256, H64};
-    use hex_literal::hex;
 
     #[test]
     fn hashimoto_should_work() {
         type DAG = LightDAG<EthereumPatch>;
         let light_dag = DAG::new(0x8947a9.into());
         // bare_hash of block#8996777 on ethereum mainnet
-        let partial_header_hash = H256::from(hex!(
+        let partial_header_hash = H256::from_slice(&hex::decode(
             "3c2e6623b1de8862a927eeeef2b6b25dea6e1d9dad88dca3c239be3959dc384a"
-        ));
+        ).unwrap());
         let mixh = light_dag
-            .hashimoto(partial_header_hash, H64::from(hex!("a5d3d0ccc8bb8a29")))
+            .hashimoto(
+                partial_header_hash,
+                H64::from_slice(&hex::decode("a5d3d0ccc8bb8a29").unwrap()),
+            )
             .0;
         assert_eq!(
             mixh,
-            H256::from(hex!(
+            H256::from_slice(&hex::decode(
                 "543bc0769f7d5df30e7633f4a01552c2cee7baace8a6da37fddaa19e49e81209"
-            ))
+            ).unwrap())
         );
     }
 }

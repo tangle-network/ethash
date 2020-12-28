@@ -1,6 +1,4 @@
-use super::*;
 use ethereum_types::{Address, Bloom, H256, H64, U256};
-use rlp::RlpStream;
 use rlp_derive::{RlpDecodable, RlpEncodable};
 
 #[derive(Debug, Clone, RlpEncodable, RlpDecodable)]
@@ -64,28 +62,5 @@ impl BlockHeader {
         let mut data = [0u8; 32];
         data.copy_from_slice(self.extra_data.as_bytes());
         H256(data)
-    }
-
-    fn stream_rlp(&self, stream: &mut RlpStream, partial: bool) {
-        stream.begin_list(13 + if !partial { 2 } else { 0 });
-
-        stream.append(&self.parent_hash);
-        stream.append(&self.uncles_hash);
-        stream.append(&self.author);
-        stream.append(&self.state_root);
-        stream.append(&self.transactions_root);
-        stream.append(&self.receipts_root);
-        stream.append(&self.log_bloom);
-        stream.append(&self.difficulty);
-        stream.append(&self.number);
-        stream.append(&self.gas_limit);
-        stream.append(&self.gas_used);
-        stream.append(&self.timestamp);
-        stream.append(&self.extra_data);
-
-        if !partial {
-            stream.append(&self.mix_hash);
-            stream.append(&self.nonce);
-        }
     }
 }
