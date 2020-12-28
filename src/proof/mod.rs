@@ -1,6 +1,9 @@
 #[cfg(feature = "std")]
 use std::io;
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
 use ethereum_types::{H128, H256, H64};
@@ -34,7 +37,7 @@ pub fn get_indices<F>(
 where
     F: Fn(usize) -> [u32; HASH_LENGTH],
 {
-    let mut result = vec![];
+    let mut result = Vec::new();
     let rows = (full_size / MIX_BYTES) as u32;
     let mut seed = [0u8; 40]; // 32 + 8
     seed[0..32].copy_from_slice(header_hash.as_bytes()); // 32

@@ -1,3 +1,6 @@
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
 use ethereum_types::{Address, Bloom, H256, H64, U256};
 use rlp_derive::{RlpDecodable, RlpEncodable};
 

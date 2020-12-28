@@ -1,6 +1,9 @@
 use core::convert::TryInto;
 use core::ops::Deref;
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 use ethereum_types::H256;
 use sha2::Digest;
 
