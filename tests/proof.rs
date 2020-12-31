@@ -66,15 +66,16 @@ fn proofs() {
         std::fs::File::open("target/dataset.bin").expect("dataset is generated")
     };
     let tree = ethash::calc_dataset_merkle_proofs(dag.epoch, &dataset);
-    let root = tree.root();
+    let root = tree.hash();
 
     // an easier way to calclute the root, if you don't need the proofs.
     // let root = ethash::calc_dataset_merkle_root(dag.epoch, &dataset);
-
-    assert_eq!(hex::encode(root.0), "b1f71111e5a1cea6090fc8e94918d82a");
-
+    println!("root: 0x{}", hex::encode(&root.0));
+    assert_eq!(hex::encode(root.0), "f346b91a0469b7960a7b00d7812a5023");
+    let depth = ethash::calc_dataset_depth(dag.epoch);
     for index in &indices {
         // these proofs could be serde to json files.
-        let proofs = tree.create_proof(*index as _);
+        let (proof, _) = tree.generate_proof(*index as _, depth);
+        println!("0x{}", hex::encode(&proof.0));
     }
 }

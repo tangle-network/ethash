@@ -17,6 +17,7 @@ pub const HASH_LENGTH: usize = 16;
 pub const WORD_LENGTH: usize = 128;
 pub const BRANCH_ELEMENT_LENGTH: usize = 32;
 
+mod merkle_proof;
 pub mod mtree;
 pub mod types;
 
@@ -69,24 +70,19 @@ where
     result
 }
 
-struct DagMerkleTree;
-
-impl mrklt::Merge for DagMerkleTree {
-    type Hash = mtree::Hash;
-
-    fn leaf(leaf: &Self::Hash) -> Self::Hash { *leaf }
-
-    fn merge(left: &Self::Hash, right: &Self::Hash) -> Self::Hash {
-        mtree::hash(left, right)
-    }
-}
-
 /// A conventional way for calculating the Root hash of the merkle tree.
 #[cfg(feature = "std")]
 pub fn calc_dataset_merkle_root(epoch: usize, dataset: impl io::Read) -> H128 {
     let map = calc_dataset_merkle_proofs(epoch, dataset);
-    let root = map.root();
+    let root = map.hash();
     H128::from_slice(&root.0)
+}
+
+#[cfg(feature = "std")]
+pub fn calc_dataset_depth(epoch: usize) -> usize {
+    let full_size = crate::get_full_size(epoch);
+    let full_size_128_resolution = full_size / 128;
+    format!("{:b}", full_size_128_resolution - 1).len()
 }
 
 /// Calculate the merkle tree and return a HashCache that can be used to
@@ -95,9 +91,10 @@ pub fn calc_dataset_merkle_root(epoch: usize, dataset: impl io::Read) -> H128 {
 pub fn calc_dataset_merkle_proofs(
     epoch: usize,
     mut dataset: impl io::Read,
-) -> mrklt::proof_map::HashCache<mtree::Hash> {
+) -> mtree::MerkleTree {
     let full_size = crate::get_full_size(epoch);
     let full_size_128_resolution = full_size / 128;
+    let branch_depth = calc_dataset_depth(epoch);
     let mut buf = [0u8; 128];
     let mut i = 0;
     let mut leaves = Vec::with_capacity(full_size_128_resolution);
@@ -114,5 +111,6 @@ pub fn calc_dataset_merkle_proofs(
         leaves.push(leaf);
         i += 1;
     }
-    mrklt::proof_map::HashCache::from_leaves::<DagMerkleTree>(&leaves)
+
+    mtree::MerkleTree::create(&leaves, branch_depth)
 }
