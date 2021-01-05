@@ -2,7 +2,7 @@ use core::convert::TryInto;
 use core::ops::Deref;
 
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec, vec::Vec};
 
 use ethereum_types::H256;
 use lazy_static::lazy_static;
@@ -373,7 +373,6 @@ mod tests {
             1, 2, 3, 4, 5, 6, 7, 8, // e
             1, 2, 3, 4, 5, 6, 7, 8, // f
         ];
-        let hashes = Word::from(word).into_h256_array();
-        println!("{:#?}", hashes);
+        let _hashes = Word::from(word).into_h256_array();
     }
 }

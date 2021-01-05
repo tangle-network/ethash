@@ -1,8 +1,5 @@
-#[cfg(feature = "std")]
-use std::io;
-
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{format, vec::Vec};
 
 use byteorder::ByteOrder;
 use byteorder::LittleEndian;
@@ -17,7 +14,6 @@ pub const HASH_LENGTH: usize = 16;
 pub const WORD_LENGTH: usize = 128;
 pub const BRANCH_ELEMENT_LENGTH: usize = 32;
 
-mod merkle_proof;
 pub mod mtree;
 pub mod types;
 
@@ -71,14 +67,12 @@ where
 }
 
 /// A conventional way for calculating the Root hash of the merkle tree.
-#[cfg(feature = "std")]
-pub fn calc_dataset_merkle_root(epoch: usize, dataset: impl io::Read) -> H128 {
+pub fn calc_dataset_merkle_root(epoch: usize, dataset: &[u8]) -> H128 {
     let map = calc_dataset_merkle_proofs(epoch, dataset);
     let root = map.hash();
     H128::from_slice(&root.0)
 }
 
-#[cfg(feature = "std")]
 pub fn calc_dataset_depth(epoch: usize) -> usize {
     let full_size = crate::get_full_size(epoch);
     let full_size_128_resolution = full_size / 128;
@@ -87,29 +81,20 @@ pub fn calc_dataset_depth(epoch: usize) -> usize {
 
 /// Calculate the merkle tree and return a HashCache that can be used to
 /// calculating proofs and can be used to cache them to filesystem.
-#[cfg(feature = "std")]
 pub fn calc_dataset_merkle_proofs(
     epoch: usize,
-    mut dataset: impl io::Read,
+    dataset: &[u8],
 ) -> mtree::MerkleTree {
     let full_size = crate::get_full_size(epoch);
     let full_size_128_resolution = full_size / 128;
     let branch_depth = calc_dataset_depth(epoch);
-    let mut buf = [0u8; 128];
-    let mut i = 0;
     let mut leaves = Vec::with_capacity(full_size_128_resolution);
-    while i < full_size_128_resolution {
-        if let Ok(n) = dataset.read(&mut buf) {
-            if n == 0 {
-                break;
-            }
-            if n != 128 {
-                panic!("Malformed dataset");
-            }
-        }
+    let chunks = dataset.chunks_exact(128);
+    for chunk in chunks {
+        let mut buf = [0u8; 128];
+        buf.copy_from_slice(chunk);
         let leaf = mtree::hash_element(&mtree::Word(buf));
         leaves.push(leaf);
-        i += 1;
     }
 
     mtree::MerkleTree::create(&leaves, branch_depth)
