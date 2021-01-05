@@ -55,7 +55,7 @@ fn proofs() {
     let dataset_path = std::path::PathBuf::from("target/dataset.bin");
     let dataset = if dataset_path.exists() {
         eprintln!("Dataset found at target/dataset.bin");
-        std::fs::File::open("target/dataset.bin").expect("dataset is generated")
+        std::fs::read("target/dataset.bin").expect("dataset is generated")
     } else {
         let full_size = ethash::get_full_size(dag.epoch);
         let mut bytes = vec![0u8; full_size];
@@ -63,7 +63,7 @@ fn proofs() {
         ethash::make_dataset(&mut bytes, &dag.cache);
         std::fs::write("target/dataset.bin", &bytes).unwrap();
         eprintln!("Dataset is ready!");
-        std::fs::File::open("target/dataset.bin").expect("dataset is generated")
+        std::fs::read("target/dataset.bin").expect("dataset is generated")
     };
     let tree = ethash::calc_dataset_merkle_proofs(dag.epoch, &dataset);
     let root = tree.hash();
