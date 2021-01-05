@@ -12,7 +12,7 @@ rlp = { version = "0.4", default-features = false }
 byteorder = { version = "1", default-features = false }
 sha3 = { version = "0.8", default-features = false }
 sha2 = { version = "0.8", default-features = false, optional = true }
-lazy_static = { version = "1.4", default-features = false, optional = true }
+lazy_static = { version = "1.4", default-features = false, optional = true, features = ["spin_no_std"] }
 
 tiny-keccak = { version = "2.0.1", features = ["keccak"], optional = true }
 rlp-derive = { version = "0.1.0", default-features = false, optional = true }
