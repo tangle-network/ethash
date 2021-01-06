@@ -93,7 +93,7 @@ pub fn calc_dataset_merkle_proofs(
     for chunk in chunks {
         let mut buf = [0u8; 128];
         buf.copy_from_slice(chunk);
-        let leaf = mtree::hash_element(&mtree::Word(buf));
+        let leaf = mtree::Word(buf);
         leaves.push(leaf);
     }
 

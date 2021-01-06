@@ -179,6 +179,7 @@ pub fn calc_dataset_item(cache: &[u8], i: usize) -> H512 {
     H512::from(z)
 }
 
+#[cfg(not(feature = "std"))]
 /// Make an Ethash dataset using the given hash.
 pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
     let n = dataset.len() / HASH_BYTES;
@@ -188,6 +189,32 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
         let to = from + 64;
         dataset[from..to].copy_from_slice(z.as_bytes());
     }
+}
+
+#[cfg(feature = "std")]
+pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
+    use rayon::prelude::*;
+
+    let n = dataset.len() / HASH_BYTES;
+    let cache = cache.to_owned(); // copy/clone the cache once.
+    let cache = std::sync::Arc::new(cache); // share it between threads.
+    let dataset = parking_lot::Mutex::new(dataset);
+    // setup rayon thread pool.
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get())
+        .build_global()
+        .unwrap();
+    // start the party
+    (0..n).into_par_iter().for_each_init(
+        || cache.clone(),
+        |cache, i| {
+            let z = calc_dataset_item(cache, i);
+            let from = i * 64;
+            let to = from + 64;
+            let mut d = dataset.lock();
+            d[from..to].copy_from_slice(z.as_bytes());
+        },
+    );
 }
 
 /// "Main" function of Ethash, calculating the mix digest and result given the

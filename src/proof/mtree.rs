@@ -12,7 +12,7 @@ const HASH_LENGTH: usize = 16; // bytes.
 const WORD_LENGTH: usize = 128; // bytes.
 const BRANCH_ELEMENT_LENGTH: usize = 32; // bytes.
 const MAX_TREE_DEPTH: usize = 32;
-const EMPTY_SLICE: &[Hash] = &[];
+const EMPTY_SLICE: &[Word] = &[];
 const ZERO_HASHES_MAX_INDEX: usize = 48;
 
 lazy_static! {
@@ -36,7 +36,7 @@ lazy_static! {
 pub struct Hash(pub [u8; HASH_LENGTH]);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(super) struct Word(pub [u8; WORD_LENGTH]);
+pub struct Word(pub [u8; WORD_LENGTH]);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(super) struct BranchElement(pub [u8; BRANCH_ELEMENT_LENGTH]);
@@ -130,6 +130,17 @@ impl From<[Hash; 2]> for BranchElement {
     }
 }
 
+impl From<[H256; 4]> for Word {
+    fn from(b: [H256; 4]) -> Self {
+        let mut inner = [0u8; WORD_LENGTH];
+        inner[0..32].copy_from_slice(b[0].as_bytes());
+        inner[32..64].copy_from_slice(b[1].as_bytes());
+        inner[64..96].copy_from_slice(b[2].as_bytes());
+        inner[96..128].copy_from_slice(b[3].as_bytes());
+        Self(inner)
+    }
+}
+
 impl Into<[H256; 4]> for Word {
     fn into(self) -> [H256; 4] { self.into_h256_array() }
 }
@@ -182,7 +193,7 @@ pub(super) fn hash_element(word: &Word) -> Hash {
 #[derive(Debug, PartialEq)]
 pub enum MerkleTree {
     /// Leaf node with the hash of its content.
-    Leaf(Hash),
+    Leaf(Hash, Word),
     /// Internal node with hash, left subtree and right subtree.
     Node(Hash, Box<Self>, Box<Self>),
     /// Zero subtree of a given depth.
@@ -207,7 +218,7 @@ pub enum MerkleTreeError {
 
 impl MerkleTree {
     /// Create a new Merkle tree from a list of leaves and a fixed depth.
-    pub fn create(leaves: &[Hash], depth: usize) -> Self {
+    pub fn create(leaves: &[Word], depth: usize) -> Self {
         use MerkleTree::*;
 
         if leaves.is_empty() {
@@ -217,7 +228,7 @@ impl MerkleTree {
         match depth {
             0 => {
                 debug_assert_eq!(leaves.len(), 1);
-                Leaf(leaves[0])
+                Leaf(hash_element(&leaves[0]), leaves[0])
             },
             _ => {
                 // Split leaves into left and right subtrees
@@ -243,7 +254,7 @@ impl MerkleTree {
     /// data.
     pub fn push_leaf(
         &mut self,
-        elem: Hash,
+        elem: Word,
         depth: usize,
     ) -> Result<(), MerkleTreeError> {
         use MerkleTree::*;
@@ -253,7 +264,7 @@ impl MerkleTree {
         }
 
         match self {
-            Leaf(_) => return Err(MerkleTreeError::LeafReached),
+            Leaf(_, _) => return Err(MerkleTreeError::LeafReached),
             Zero(_) => {
                 *self = MerkleTree::create(&[elem], depth);
             },
@@ -262,7 +273,7 @@ impl MerkleTree {
                 let right: &mut MerkleTree = &mut *right;
                 match (&*left, &*right) {
                     // Tree is full
-                    (Leaf(_), Leaf(_)) => {
+                    (Leaf(_, _), Leaf(_, _)) => {
                         return Err(MerkleTreeError::MerkleTreeFull)
                     },
                     // There is a right node so insert in right node
@@ -277,7 +288,7 @@ impl MerkleTree {
                     },
                     // Leaf on left branch and zero on right branch, insert on
                     // right side
-                    (Leaf(_), Zero(_)) => {
+                    (Leaf(_, _), Zero(_)) => {
                         *right = MerkleTree::create(&[elem], depth - 1);
                     },
                     // Try inserting on the left node -> if it fails because it
@@ -305,16 +316,27 @@ impl MerkleTree {
     /// Retrieve the root hash of this Merkle tree.
     pub fn hash(&self) -> Hash {
         match *self {
-            MerkleTree::Leaf(h) => h,
+            MerkleTree::Leaf(h, _) => h,
             MerkleTree::Node(h, _, _) => h,
             MerkleTree::Zero(depth) => ZERO_HASHES[depth],
+        }
+    }
+
+    /// Retrieve the element value of this leaf.
+    ///
+    /// None otherwise.
+    pub fn value(&self) -> Option<Word> {
+        match *self {
+            MerkleTree::Leaf(_, element) => Some(element),
+            MerkleTree::Node(_, _, _) => None,
+            MerkleTree::Zero(_) => None,
         }
     }
 
     /// Get a reference to the left and right subtrees if they exist.
     pub fn left_and_right_branches(&self) -> Option<(&Self, &Self)> {
         match *self {
-            MerkleTree::Leaf(_) | MerkleTree::Zero(0) => None,
+            MerkleTree::Leaf(_, _) | MerkleTree::Zero(0) => None,
             MerkleTree::Node(_, ref l, ref r) => Some((l, r)),
             MerkleTree::Zero(depth) => {
                 Some((&ZERO_NODES[depth - 1], &ZERO_NODES[depth - 1]))
@@ -323,7 +345,7 @@ impl MerkleTree {
     }
 
     /// Is this Merkle tree a leaf?
-    pub fn is_leaf(&self) -> bool { matches!(self, MerkleTree::Leaf(_)) }
+    pub fn is_leaf(&self) -> bool { matches!(self, MerkleTree::Leaf(_, _)) }
 
     /// Return the leaf at `index` and a Merkle proof of its inclusion.
     ///
@@ -333,7 +355,7 @@ impl MerkleTree {
         &self,
         index: usize,
         depth: usize,
-    ) -> (Hash, Vec<Hash>) {
+    ) -> (Word, Hash, Vec<Hash>) {
         let mut proof = vec![];
         let mut current_node = self;
         let mut current_depth = depth;
@@ -360,24 +382,25 @@ impl MerkleTree {
         // Put proof in bottom-up order.
         proof.reverse();
 
-        (current_node.hash(), proof)
+        (current_node.value().unwrap(), current_node.hash(), proof)
     }
 }
 
-/// Verify a proof that `leaf` exists at `index` in a Merkle tree rooted at
+/// Verify a proof that `element` exists at `index` in a Merkle tree rooted at
 /// `root`.
 ///
 /// The `branch` argument is the main component of the proof: it should be a
 /// list of internal node hashes such that the root can be reconstructed (in
 /// bottom-up order).
 pub fn verify_merkle_proof(
-    leaf: Hash,
+    element: Word,
     branch: &[Hash],
     depth: usize,
     index: usize,
     root: Hash,
 ) -> bool {
     if branch.len() == depth {
+        let leaf = hash_element(&element);
         merkle_root_from_branch(leaf, branch, depth, index) == root
     } else {
         false

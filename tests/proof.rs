@@ -1,6 +1,7 @@
 use byteorder::ByteOrder;
-use ethash::mtree::Hash;
+use ethash::mtree::{Hash, Word};
 use ethash::types;
+use ethereum_types::H256;
 
 // this test is used as a playground
 #[test]
@@ -61,10 +62,13 @@ fn proofs() {
         let full_size = ethash::get_full_size(dag.epoch);
         let mut bytes = vec![0u8; full_size];
         eprintln!("Generating dataset ...");
+        let now = std::time::Instant::now();
         ethash::make_dataset(&mut bytes, &dag.cache);
+        let e = now.elapsed();
+        println!("Generated Dataset in {}", humantime::format_duration(e));
         std::fs::write("target/dataset.bin", &bytes).unwrap();
         eprintln!("Dataset is ready!");
-        std::fs::read("target/dataset.bin").expect("dataset is generated")
+        bytes
     };
     let tree = ethash::calc_dataset_merkle_proofs(dag.epoch, &dataset);
     let root = tree.hash();
@@ -79,6 +83,7 @@ fn proofs() {
         pub proof_length: u64,
         pub header_rlp: String,
         pub merkle_root: String,
+        pub elements: Vec<String>,
         pub merkle_proofs: Vec<String>,
     }
 
@@ -87,30 +92,45 @@ fn proofs() {
         proof_length: depth as _,
         header_rlp: rlp_encoded_str.trim().to_owned(),
         merkle_root: hex::encode(&root.0),
+        elements: Vec::with_capacity(depth * 4),
         merkle_proofs: Vec::with_capacity(depth * 2),
     };
     for index in &indices {
         // these proofs could be serde to json files.
-        let (element, proofs) = tree.generate_proof(*index as _, depth);
-        output.merkle_proofs.push(hex::encode(&element.0));
+        let (element, _leaf_hash, proofs) =
+            tree.generate_proof(*index as _, depth);
+        let els = element.into_h256_array();
+        output.elements.extend(els.iter().map(|v| hex::encode(&v)));
         output
             .merkle_proofs
-            .extend(proofs.into_iter().map(|v| hex::encode(&v.0)));
+            .extend(proofs.iter().map(|v| hex::encode(&v.0)));
     }
 
     let json = serde_json::to_vec_pretty(&output).unwrap();
     std::fs::write("target/output.json", &json).unwrap();
 
+    // read it again to use the proofs.
     let input: BlockWithProofs = serde_json::from_slice(&json).unwrap();
 
     let depth = input.proof_length;
-    let chunks = input.merkle_proofs.chunks_exact((depth + 1) as usize);
-    for (chunk, index) in chunks.zip(indices) {
-        let element = hex::decode(chunk.first().unwrap()).unwrap();
-        let element = Hash::from(element.as_slice());
-        let proofs: Vec<_> = chunk
+    let proofs_chunks = input.merkle_proofs.chunks_exact((depth) as usize);
+    let element_chunks = input.elements.chunks_exact(4);
+    let iter = proofs_chunks.zip(element_chunks).zip(indices);
+    for ((proofs, parts), index) in iter {
+        let parts: Vec<_> = parts
             .iter()
-            .skip(1) // skip the element itself
+            .map(|v| hex::decode(v).unwrap())
+            .map(|mut v| {
+                v.reverse(); // this needed to be Little Endian.
+                H256::from_slice(&v)
+            })
+            .collect();
+        let mut h256_array = [H256::zero(); 4];
+        h256_array.copy_from_slice(&parts);
+        let element = Word::from(h256_array);
+
+        let proofs: Vec<_> = proofs
+            .iter()
             .map(|v| hex::decode(v).unwrap())
             .map(|v| Hash::from(v.as_slice()))
             .collect();
@@ -121,6 +141,11 @@ fn proofs() {
             index as usize,
             root,
         );
-        assert!(included);
+        assert!(
+            included,
+            "index: {}, element: {}",
+            index,
+            hex::encode(&element.0)
+        );
     }
 }
