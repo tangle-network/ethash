@@ -1,11 +1,12 @@
 use byteorder::ByteOrder;
+use ethash::mtree::Hash;
 use ethash::types;
 
 // this test is used as a playground
 #[test]
 fn proofs() {
-    let rlp_encoded = include_str!("fixtures/2.rlp");
-    let rlp_encoded = hex::decode(rlp_encoded.trim()).unwrap();
+    let rlp_encoded_str = include_str!("fixtures/2.rlp");
+    let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
     let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
     let header_hash =
         ethash::seal_header(&types::BlockHeaderSeal::from(header.clone()));
@@ -72,10 +73,53 @@ fn proofs() {
     // let root = ethash::calc_dataset_merkle_root(dag.epoch, &dataset);
     println!("root: 0x{}", hex::encode(&root.0));
     assert_eq!(hex::encode(root.0), "f346b91a0469b7960a7b00d7812a5023");
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    struct BlockWithProofs {
+        pub proof_length: u64,
+        pub header_rlp: String,
+        pub merkle_root: String,
+        pub merkle_proofs: Vec<String>,
+    }
+
     let depth = ethash::calc_dataset_depth(dag.epoch);
+    let mut output = BlockWithProofs {
+        proof_length: depth as _,
+        header_rlp: rlp_encoded_str.trim().to_owned(),
+        merkle_root: hex::encode(&root.0),
+        merkle_proofs: Vec::with_capacity(depth * 2),
+    };
     for index in &indices {
         // these proofs could be serde to json files.
-        let (proof, _) = tree.generate_proof(*index as _, depth);
-        println!("0x{}", hex::encode(&proof.0));
+        let (element, proofs) = tree.generate_proof(*index as _, depth);
+        output.merkle_proofs.push(hex::encode(&element.0));
+        output
+            .merkle_proofs
+            .extend(proofs.into_iter().map(|v| hex::encode(&v.0)));
+    }
+
+    let json = serde_json::to_vec_pretty(&output).unwrap();
+    std::fs::write("target/output.json", &json).unwrap();
+
+    let input: BlockWithProofs = serde_json::from_slice(&json).unwrap();
+
+    let depth = input.proof_length;
+    let chunks = input.merkle_proofs.chunks_exact((depth + 1) as usize);
+    for (chunk, index) in chunks.zip(indices) {
+        let element = hex::decode(&chunk[0]).unwrap();
+        let element = Hash::from(element.as_slice());
+        let proofs: Vec<_> = chunk[1..]
+            .iter()
+            .map(|v| hex::decode(v).unwrap())
+            .map(|v| Hash::from(v.as_slice()))
+            .collect();
+        let included = ethash::mtree::verify_merkle_proof(
+            element,
+            &proofs,
+            depth as usize,
+            index as usize,
+            root,
+        );
+        assert!(included);
     }
 }

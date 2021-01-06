@@ -95,8 +95,26 @@ impl From<[u8; HASH_LENGTH]> for Hash {
     fn from(b: [u8; HASH_LENGTH]) -> Self { Self(b) }
 }
 
+impl<'a> From<&'a [u8]> for Hash {
+    fn from(b: &'a [u8]) -> Self {
+        assert_eq!(b.len(), HASH_LENGTH);
+        let mut inner = [0u8; HASH_LENGTH];
+        inner.copy_from_slice(&b);
+        Self(inner)
+    }
+}
+
 impl From<[u8; WORD_LENGTH]> for Word {
     fn from(b: [u8; WORD_LENGTH]) -> Self { Self(b) }
+}
+
+impl<'a> From<&'a [u8]> for Word {
+    fn from(b: &'a [u8]) -> Self {
+        assert_eq!(b.len(), WORD_LENGTH);
+        let mut inner = [0u8; WORD_LENGTH];
+        inner.copy_from_slice(&b);
+        Self(inner)
+    }
 }
 
 impl From<[u8; BRANCH_ELEMENT_LENGTH]> for BranchElement {
@@ -213,12 +231,9 @@ impl MerkleTree {
 
                 let left_subtree = MerkleTree::create(left_leaves, depth - 1);
                 let right_subtree = MerkleTree::create(right_leaves, depth - 1);
-                let hash = super::mtree::hash(
-                    &left_subtree.hash(),
-                    &right_subtree.hash(),
-                );
+                let h = hash(&left_subtree.hash(), &right_subtree.hash());
 
-                Node(hash, Box::new(left_subtree), Box::new(right_subtree))
+                Node(h, Box::new(left_subtree), Box::new(right_subtree))
             },
         }
     }
@@ -242,7 +257,7 @@ impl MerkleTree {
             Zero(_) => {
                 *self = MerkleTree::create(&[elem], depth);
             },
-            Node(ref mut hash, ref mut left, ref mut right) => {
+            Node(ref mut h, ref mut left, ref mut right) => {
                 let left: &mut MerkleTree = &mut *left;
                 let right: &mut MerkleTree = &mut *right;
                 match (&*left, &*right) {
@@ -280,7 +295,7 @@ impl MerkleTree {
                     // All other possibilities are invalid MerkleTrees
                     (_, _) => return Err(MerkleTreeError::Invalid),
                 };
-                *hash = super::mtree::hash(&left.hash(), &right.hash());
+                *h = hash(&left.hash(), &right.hash());
             },
         }
 
@@ -347,6 +362,48 @@ impl MerkleTree {
 
         (current_node.hash(), proof)
     }
+}
+
+/// Verify a proof that `leaf` exists at `index` in a Merkle tree rooted at
+/// `root`.
+///
+/// The `branch` argument is the main component of the proof: it should be a
+/// list of internal node hashes such that the root can be reconstructed (in
+/// bottom-up order).
+pub fn verify_merkle_proof(
+    leaf: Hash,
+    branch: &[Hash],
+    depth: usize,
+    index: usize,
+    root: Hash,
+) -> bool {
+    if branch.len() == depth {
+        merkle_root_from_branch(leaf, branch, depth, index) == root
+    } else {
+        false
+    }
+}
+
+/// Compute a root hash from a leaf and a Merkle proof.
+fn merkle_root_from_branch(
+    leaf: Hash,
+    branch: &[Hash],
+    depth: usize,
+    index: usize,
+) -> Hash {
+    assert_eq!(branch.len(), depth, "proof length should equal depth");
+
+    let mut mroot = leaf;
+
+    for (i, leaf) in branch.iter().enumerate().take(depth) {
+        let ith_bit = (index >> i) & 0x01;
+        if ith_bit == 1 {
+            mroot = hash(&leaf, &mroot);
+        } else {
+            mroot = hash(&mroot, &leaf);
+        }
+    }
+    mroot
 }
 
 #[cfg(test)]
