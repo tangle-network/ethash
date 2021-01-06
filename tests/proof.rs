@@ -106,10 +106,11 @@ fn proofs() {
     let depth = input.proof_length;
     let chunks = input.merkle_proofs.chunks_exact((depth + 1) as usize);
     for (chunk, index) in chunks.zip(indices) {
-        let element = hex::decode(&chunk[0]).unwrap();
+        let element = hex::decode(chunk.first().unwrap()).unwrap();
         let element = Hash::from(element.as_slice());
-        let proofs: Vec<_> = chunk[1..]
+        let proofs: Vec<_> = chunk
             .iter()
+            .skip(1) // skip the element itself
             .map(|v| hex::decode(v).unwrap())
             .map(|v| Hash::from(v.as_slice()))
             .collect();
