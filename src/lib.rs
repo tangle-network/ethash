@@ -199,12 +199,13 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
     let cache = cache.to_owned(); // copy/clone the cache once.
     let cache = std::sync::Arc::new(cache); // share it between threads.
     let dataset = parking_lot::Mutex::new(dataset);
-    // setup rayon thread pool.
 
+    // setup rayon thread pool.
     let _ = rayon::ThreadPoolBuilder::new()
         .num_threads(num_cpus::get())
         .build_global()
         .is_ok();
+
     // start the party
     (0..n).into_par_iter().for_each_init(
         || cache.clone(),
