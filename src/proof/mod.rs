@@ -68,8 +68,10 @@ where
 
 /// A conventional way for calculating the Root hash of the merkle tree.
 pub fn calc_dataset_merkle_root(epoch: usize, dataset: &[u8]) -> H128 {
-    let map = calc_dataset_merkle_proofs(epoch, dataset);
-    let root = map.hash();
+    let (depth, leaves) = calc_dataset_merkle_leaves(epoch, dataset);
+    let leaves: Vec<&mtree::DobuleLeaf> = leaves.iter().collect();
+    let tree = mtree::MerkleTree::create(&leaves, depth);
+    let root = tree.hash();
     H128::from_slice(&root.0)
 }
 
@@ -81,21 +83,49 @@ pub fn calc_dataset_depth(epoch: usize) -> usize {
 
 /// Calculate the merkle tree and return a HashCache that can be used to
 /// calculating proofs and can be used to cache them to filesystem.
-pub fn calc_dataset_merkle_proofs(
+pub fn calc_dataset_merkle_leaves<'a>(
     epoch: usize,
     dataset: &[u8],
-) -> mtree::MerkleTree {
+) -> (usize, Vec<mtree::DobuleLeaf>) {
+    let branch_depth = calc_dataset_depth(epoch);
+    let leaves = dataset_leaves(epoch, dataset);
+    (branch_depth, leaves)
+}
+
+#[cfg(not(feature = "std"))]
+fn dataset_leaves(epoch: usize, dataset: &[u8]) -> Vec<mtree::DobuleLeaf> {
     let full_size = crate::get_full_size(epoch);
     let full_size_128_resolution = full_size / 128;
-    let branch_depth = calc_dataset_depth(epoch);
     let mut leaves = Vec::with_capacity(full_size_128_resolution);
     let chunks = dataset.chunks_exact(128);
     for chunk in chunks {
         let mut buf = [0u8; 128];
         buf.copy_from_slice(chunk);
-        let leaf = mtree::Word(buf);
+        let word = mtree::Word(buf);
+        let leaf = mtree::DobuleLeaf::new(word);
         leaves.push(leaf);
     }
+    leaves
+}
 
-    mtree::MerkleTree::create(&leaves, branch_depth)
+#[cfg(feature = "std")]
+fn dataset_leaves(epoch: usize, dataset: &[u8]) -> Vec<mtree::DobuleLeaf> {
+    use rayon::prelude::*;
+    let _ = epoch;
+    // setup rayon thread pool.
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get())
+        .build_global()
+        .is_ok();
+
+    let leaves = dataset
+        .par_chunks_exact(128)
+        .map(|chunk| {
+            let mut buf = [0u8; 128];
+            buf.copy_from_slice(chunk);
+            let word = mtree::Word(buf);
+            mtree::DobuleLeaf::new(word)
+        })
+        .collect();
+    leaves
 }

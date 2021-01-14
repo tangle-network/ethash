@@ -12,12 +12,12 @@ const HASH_LENGTH: usize = 16; // bytes.
 const WORD_LENGTH: usize = 128; // bytes.
 const BRANCH_ELEMENT_LENGTH: usize = 32; // bytes.
 const MAX_TREE_DEPTH: usize = 32;
-const EMPTY_SLICE: &[Word] = &[];
+const EMPTY_SLICE: &[&DobuleLeaf] = &[];
 const ZERO_HASHES_MAX_INDEX: usize = 48;
 
 lazy_static! {
     /// Zero nodes to act as "synthetic" left and right subtrees of other zero nodes.
-    static ref ZERO_NODES: Vec<MerkleTree> = {
+    static ref ZERO_NODES: Vec<MerkleTree<'static>> = {
         (0..=MAX_TREE_DEPTH).map(MerkleTree::Zero).collect()
     };
 
@@ -35,7 +35,7 @@ lazy_static! {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Hash(pub [u8; HASH_LENGTH]);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Word(pub [u8; WORD_LENGTH]);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -191,9 +191,9 @@ pub(super) fn hash_element(word: &Word) -> Hash {
 /// indices are populated by non-zero leaves (perfect for the deposit contract
 /// tree).
 #[derive(Debug, PartialEq)]
-pub enum MerkleTree {
+pub enum MerkleTree<'a> {
     /// Leaf node with the hash of its content.
-    Leaf(Hash, Word),
+    Leaf(&'a DobuleLeaf),
     /// Internal node with hash, left subtree and right subtree.
     Node(Hash, Box<Self>, Box<Self>),
     /// Zero subtree of a given depth.
@@ -216,9 +216,9 @@ pub enum MerkleTreeError {
     ArithError,
 }
 
-impl MerkleTree {
+impl<'a> MerkleTree<'a> {
     /// Create a new Merkle tree from a list of leaves and a fixed depth.
-    pub fn create(leaves: &[Word], depth: usize) -> Self {
+    pub fn create(leaves: &[&'a DobuleLeaf], depth: usize) -> Self {
         use MerkleTree::*;
 
         if leaves.is_empty() {
@@ -228,7 +228,7 @@ impl MerkleTree {
         match depth {
             0 => {
                 debug_assert_eq!(leaves.len(), 1);
-                Leaf(hash_element(&leaves[0]), leaves[0])
+                Leaf(leaves[0])
             },
             _ => {
                 // Split leaves into left and right subtrees
@@ -254,7 +254,7 @@ impl MerkleTree {
     /// data.
     pub fn push_leaf(
         &mut self,
-        elem: Word,
+        elem: &'a DobuleLeaf,
         depth: usize,
     ) -> Result<(), MerkleTreeError> {
         use MerkleTree::*;
@@ -264,7 +264,7 @@ impl MerkleTree {
         }
 
         match self {
-            Leaf(_, _) => return Err(MerkleTreeError::LeafReached),
+            Leaf(_) => return Err(MerkleTreeError::LeafReached),
             Zero(_) => {
                 *self = MerkleTree::create(&[elem], depth);
             },
@@ -273,7 +273,7 @@ impl MerkleTree {
                 let right: &mut MerkleTree = &mut *right;
                 match (&*left, &*right) {
                     // Tree is full
-                    (Leaf(_, _), Leaf(_, _)) => {
+                    (Leaf(_), Leaf(_)) => {
                         return Err(MerkleTreeError::MerkleTreeFull)
                     },
                     // There is a right node so insert in right node
@@ -288,7 +288,7 @@ impl MerkleTree {
                     },
                     // Leaf on left branch and zero on right branch, insert on
                     // right side
-                    (Leaf(_, _), Zero(_)) => {
+                    (Leaf(_), Zero(_)) => {
                         *right = MerkleTree::create(&[elem], depth - 1);
                     },
                     // Try inserting on the left node -> if it fails because it
@@ -316,18 +316,16 @@ impl MerkleTree {
     /// Retrieve the root hash of this Merkle tree.
     pub fn hash(&self) -> Hash {
         match *self {
-            MerkleTree::Leaf(h, _) => h,
+            MerkleTree::Leaf(ref h) => h.hash,
             MerkleTree::Node(h, _, _) => h,
             MerkleTree::Zero(depth) => ZERO_HASHES[depth],
         }
     }
 
-    /// Retrieve the element value of this leaf.
-    ///
-    /// None otherwise.
+    /// Retrieve the value [`Word`] of this Merkle tree (if any).
     pub fn value(&self) -> Option<Word> {
         match *self {
-            MerkleTree::Leaf(_, element) => Some(element),
+            MerkleTree::Leaf(ref h) => Some(h.word.clone()),
             MerkleTree::Node(_, _, _) => None,
             MerkleTree::Zero(_) => None,
         }
@@ -336,7 +334,7 @@ impl MerkleTree {
     /// Get a reference to the left and right subtrees if they exist.
     pub fn left_and_right_branches(&self) -> Option<(&Self, &Self)> {
         match *self {
-            MerkleTree::Leaf(_, _) | MerkleTree::Zero(0) => None,
+            MerkleTree::Leaf(_) | MerkleTree::Zero(0) => None,
             MerkleTree::Node(_, ref l, ref r) => Some((l, r)),
             MerkleTree::Zero(depth) => {
                 Some((&ZERO_NODES[depth - 1], &ZERO_NODES[depth - 1]))
@@ -345,7 +343,7 @@ impl MerkleTree {
     }
 
     /// Is this Merkle tree a leaf?
-    pub fn is_leaf(&self) -> bool { matches!(self, MerkleTree::Leaf(_, _)) }
+    pub fn is_leaf(&self) -> bool { matches!(self, MerkleTree::Leaf(_)) }
 
     /// Return the leaf at `index` and a Merkle proof of its inclusion.
     ///
@@ -393,14 +391,14 @@ impl MerkleTree {
 /// list of internal node hashes such that the root can be reconstructed (in
 /// bottom-up order).
 pub fn verify_merkle_proof(
-    element: Word,
+    element: &Word,
     branch: &[Hash],
     depth: usize,
     index: usize,
     root: Hash,
 ) -> bool {
     if branch.len() == depth {
-        let leaf = hash_element(&element);
+        let leaf = hash_element(element);
         merkle_root_from_branch(leaf, branch, depth, index) == root
     } else {
         false
@@ -427,6 +425,22 @@ fn merkle_root_from_branch(
         }
     }
     mroot
+}
+
+/// Element that holds the actual data and it's hash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DobuleLeaf {
+    pub hash: Hash,
+    pub word: Word,
+}
+
+impl DobuleLeaf {
+    pub fn new(word: Word) -> Self {
+        Self {
+            hash: hash_element(&word),
+            word,
+        }
+    }
 }
 
 #[cfg(test)]

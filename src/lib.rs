@@ -197,7 +197,6 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
 
     let n = dataset.len() / HASH_BYTES;
     let cache = cache.to_owned(); // copy/clone the cache once.
-    let cache = std::sync::Arc::new(cache); // share it between threads.
     let dataset = parking_lot::Mutex::new(dataset);
 
     // setup rayon thread pool.
@@ -207,16 +206,16 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
         .is_ok();
 
     // start the party
-    (0..n).into_par_iter().for_each_init(
-        || cache.clone(),
-        |cache, i| {
-            let z = calc_dataset_item(cache, i);
+    (0..n)
+        .into_par_iter()
+        .map(|i| calc_dataset_item(&cache, i))
+        .enumerate()
+        .for_each(|(i, z)| {
             let from = i * 64;
             let to = from + 64;
             let mut d = dataset.lock();
             d[from..to].copy_from_slice(z.as_bytes());
-        },
-    );
+        });
 }
 
 /// "Main" function of Ethash, calculating the mix digest and result given the

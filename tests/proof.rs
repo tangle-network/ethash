@@ -70,7 +70,10 @@ fn proofs() {
         eprintln!("Dataset is ready!");
         bytes
     };
-    let tree = ethash::calc_dataset_merkle_proofs(dag.epoch, &dataset);
+    let (depth, leaves) =
+        ethash::calc_dataset_merkle_leaves(dag.epoch, &dataset);
+    let leaves: Vec<_> = leaves.iter().collect();
+    let tree = ethash::mtree::MerkleTree::create(&leaves, depth);
     let root = tree.hash();
 
     // an easier way to calclute the root, if you don't need the proofs.
@@ -135,7 +138,7 @@ fn proofs() {
             .map(|v| Hash::from(v.as_slice()))
             .collect();
         let included = ethash::mtree::verify_merkle_proof(
-            element,
+            &element,
             &proofs,
             depth as usize,
             index as usize,
