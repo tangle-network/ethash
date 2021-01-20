@@ -5,7 +5,6 @@ use ethereum_types::{Address, Bloom, H256, H64, U256};
 use rlp::{Rlp, RlpStream};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "codec", derive(codec::Encode, codec::Decode))]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlockHeader {
     pub parent_hash: H256,

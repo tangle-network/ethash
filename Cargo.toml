@@ -8,7 +8,6 @@ edition = "2018"
 
 [dependencies]
 serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
-codec = { package = "parity-scale-codec", version = "1.3.4", default-features = false, features = ["derive"], optional = true }
 ethereum-types = { version = "0.9", default-features = false }
 rlp = { version = "0.4", default-features = false }
 byteorder = { version = "1", default-features = false }
@@ -34,15 +33,12 @@ withproofs = [
   "sha2",
   "lazy_static",
   "serde/alloc",
-  "codec",
   "ethereum-types/serialize",
-  "ethereum-types/codec",
 ]
 std = [
   "ethereum-types/std",
   "rlp/std",
   "serde/std",
-  "codec/std",
   "byteorder/std",
   "sha3/std",
   "num_cpus",
