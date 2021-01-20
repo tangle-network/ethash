@@ -37,8 +37,11 @@ fn main() {
             epoch,
             dataset_size / (1024 * 1024)
         );
-        let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(epoch.into());
-        let cache = dag.cache;
+
+        let cache_size = ethash::get_cache_size(epoch);
+        let seed = ethash::get_seedhash(epoch);
+        let mut cache = vec![0u8; cache_size];
+        ethash::make_cache(&mut cache, seed);
         ethash::make_dataset(&mut dataset, &cache);
         let root = ethash::calc_dataset_merkle_root(epoch, &dataset);
         println!("{}:{:?}", epoch, root);

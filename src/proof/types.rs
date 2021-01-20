@@ -1,5 +1,5 @@
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::vec::Vec;
 
 use ethereum_types::{Address, Bloom, H256, H64, U256};
 use rlp::{Rlp, RlpStream};
@@ -42,7 +42,6 @@ impl BlockHeader {
 
     fn stream_rlp(&self, stream: &mut RlpStream, partial: bool) {
         stream.begin_list(13 + if !partial { 2 } else { 0 });
-
         stream.append(&self.parent_hash);
         stream.append(&self.uncles_hash);
         stream.append(&self.author);
