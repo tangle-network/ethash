@@ -1,6 +1,8 @@
 //! Apache-2 licensed Ethash implementation.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 // The reference algorithm used is from https://github.com/ethereum/wiki/wiki/Ethash

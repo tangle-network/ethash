@@ -1,4 +1,6 @@
-use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use alloc::{vec, vec::Vec};
+
 use core::marker::PhantomData;
 use ethereum_types::{H256, H64, U256};
 
@@ -27,7 +29,7 @@ impl<P: Patch> LightDAG<P> {
         let full_size = crate::get_full_size(epoch);
         let seed = crate::get_seedhash(epoch);
 
-        let mut cache = alloc::vec![0u8; cache_size];
+        let mut cache = vec![0u8; cache_size];
         crate::make_cache(&mut cache, seed);
 
         Self {
