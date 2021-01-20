@@ -7,7 +7,6 @@ license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
-serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
 ethereum-types = { version = "0.9", default-features = false }
 rlp = { version = "0.4", default-features = false }
 byteorder = { version = "1", default-features = false }
@@ -32,13 +31,10 @@ withproofs = [
   "tiny-keccak",
   "sha2",
   "lazy_static",
-  "serde/alloc",
-  "ethereum-types/serialize",
 ]
 std = [
   "ethereum-types/std",
   "rlp/std",
-  "serde/std",
   "byteorder/std",
   "sha3/std",
   "num_cpus",
