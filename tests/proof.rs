@@ -9,8 +9,7 @@ fn proofs() {
     let rlp_encoded_str = include_str!("fixtures/2.rlp");
     let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
     let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
-    let header_hash =
-        ethash::seal_header(&types::BlockHeaderSeal::from(header.clone()));
+    let header_hash = header.seal_hash();
     assert_eq!(
         header_hash.as_bytes(),
         hex::decode(
@@ -151,4 +150,24 @@ fn proofs() {
             hex::encode(&element.0)
         );
     }
+}
+
+#[test]
+fn mix_hash_2() {
+    let rlp_encoded_str = include_str!("fixtures/2.rlp");
+    let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
+    let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
+    let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
+    let (mix_hash, _) = dag.hashimoto(header.seal_hash(), header.nonce);
+    assert_eq!(mix_hash, header.mix_hash);
+}
+
+#[test]
+fn mix_hash_10234011() {
+    let rlp_encoded_str = include_str!("fixtures/10234011.rlp");
+    let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
+    let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
+    let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
+    let (mix_hash, _) = dag.hashimoto(header.seal_hash(), header.nonce);
+    assert_eq!(mix_hash, header.mix_hash);
 }

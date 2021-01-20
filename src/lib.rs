@@ -352,13 +352,6 @@ pub fn cross_boundary(val: U256) -> U256 {
     }
 }
 
-/// Seal Header returns the hash of a block prior to it being sealed.
-///
-/// tdlr: return hash of the header.
-pub fn seal_header<H: Encodable>(header: &H) -> H256 {
-    H256::from_slice(Keccak256::digest(&rlp::encode(header)).as_slice())
-}
-
 /// Mine a nonce given the header, dataset, and the target. Target is derived
 /// from the difficulty.
 pub fn mine<T: Encodable>(
