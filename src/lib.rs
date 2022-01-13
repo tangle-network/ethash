@@ -1,8 +1,7 @@
 //! Apache-2 licensed Ethash implementation.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 // The reference algorithm used is from https://github.com/ethereum/wiki/wiki/Ethash
@@ -14,7 +13,7 @@ mod proof;
 #[cfg(feature = "withproofs")]
 pub use proof::*;
 
-pub use dag::{EthereumPatch, LightDAG, Patch};
+pub use dag::{LightDAG};
 
 use core::ops::BitXor;
 
@@ -58,8 +57,8 @@ pub fn get_full_size(epoch: usize) -> usize {
 
 fn fill_sha512(input: &[u8], a: &mut [u8], from_index: usize) {
     let mut hasher = Keccak512::default();
-    hasher.input(input);
-    let out = hasher.result();
+    hasher.update(input);
+    let out = hasher.finalize();
     for i in 0..out.len() {
         a[from_index + i] = out[i];
     }
@@ -67,8 +66,8 @@ fn fill_sha512(input: &[u8], a: &mut [u8], from_index: usize) {
 
 fn fill_sha256(input: &[u8], a: &mut [u8], from_index: usize) {
     let mut hasher = Keccak256::default();
-    hasher.input(input);
-    let out = hasher.result();
+    hasher.update(input);
+    let out = hasher.finalize();
     for i in 0..out.len() {
         a[from_index + i] = out[i];
     }
@@ -195,6 +194,7 @@ pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
 
 #[cfg(feature = "std")]
 pub fn make_dataset(dataset: &mut [u8], cache: &[u8]) {
+    use alloc::borrow::ToOwned;
     use rayon::prelude::*;
 
     let n = dataset.len() / HASH_BYTES;
@@ -235,16 +235,16 @@ pub fn hashimoto<F: Fn(usize) -> H512>(
         lookup,
         |data| {
             let mut hasher = Keccak256::default();
-            hasher.input(&data);
+            hasher.update(&data);
             let mut res = [0u8; 32];
-            res.copy_from_slice(hasher.result().as_slice());
+            res.copy_from_slice(hasher.finalize().as_slice());
             res
         },
         |data| {
             let mut hasher = Keccak512::default();
-            hasher.input(&data);
+            hasher.update(&data);
             let mut res = [0u8; 64];
-            res.copy_from_slice(hasher.result().as_slice());
+            res.copy_from_slice(hasher.finalize().as_slice());
             res
         },
     )
@@ -400,13 +400,12 @@ pub fn get_seedhash(epoch: usize) -> H256 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{EthereumPatch, LightDAG};
+    use crate::{LightDAG};
     use ethereum_types::{H256, H64};
 
     #[test]
     fn hashimoto_should_work() {
-        type DAG = LightDAG<EthereumPatch>;
-        let light_dag = DAG::new(0x8947a9.into());
+        let light_dag = LightDAG::new(0x8947a9.into());
         // bare_hash of block#8996777 on ethereum mainnet
         let partial_header_hash = H256::from_slice(&hex::decode(
             "3c2e6623b1de8862a927eeeef2b6b25dea6e1d9dad88dca3c239be3959dc384a"

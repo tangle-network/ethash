@@ -1,4 +1,3 @@
-#[cfg(not(feature = "std"))]
 use alloc::{format, vec::Vec};
 
 use byteorder::ByteOrder;

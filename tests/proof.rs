@@ -18,7 +18,7 @@ fn proofs() {
         .unwrap()
     );
 
-    let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
+    let dag = ethash::LightDAG::new(header.number);
     let (mix_hash, result) = dag.hashimoto(header_hash, header.nonce);
     assert_eq!(
         result.as_bytes(),
@@ -158,7 +158,7 @@ fn mix_hash_2() {
     let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
     let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
     dbg!(&header);
-    let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
+    let dag = ethash::LightDAG::new(header.number);
     let (mix_hash, _) = dag.hashimoto(header.seal_hash(), header.nonce);
     assert_eq!(mix_hash, header.mix_hash);
 }
@@ -169,7 +169,7 @@ fn mix_hash_10234011() {
     let rlp_encoded = hex::decode(rlp_encoded_str.trim()).unwrap();
     let header: types::BlockHeader = rlp::decode(&rlp_encoded).unwrap();
     dbg!(&header);
-    let dag = ethash::LightDAG::<ethash::EthereumPatch>::new(header.number);
+    let dag = ethash::LightDAG::new(header.number);
     let (mix_hash, _) = dag.hashimoto(header.seal_hash(), header.nonce);
     assert_eq!(mix_hash, header.mix_hash);
 }
