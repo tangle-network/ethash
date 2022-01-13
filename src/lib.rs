@@ -1,6 +1,5 @@
 //! Apache-2 licensed Ethash implementation.
-
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
